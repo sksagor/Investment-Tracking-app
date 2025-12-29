@@ -3,15 +3,15 @@ Investment Portfolio Tracker - Flask Application
 A comprehensive web application to track and manage investment portfolios.
 Features: CRUD operations, interest calculation, portfolio analytics, and more.
 
-Author: [SAM BaQuibillah Sagor]
-GitHub: [https://github.com/sksagor]
+Author: SAM BaQuibillah Sagor
+GitHub: https://github.com/sksagor
 Version: 1.0.0
 """
 
 # ============================================================================
 # IMPORT SECTION
 # ============================================================================
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 
@@ -22,8 +22,7 @@ from datetime import datetime, timedelta
 
 # Initialize Flask application
 app = Flask(__name__)
-
-# Database Configuration
+app.config['SECRET_KEY'] = 'your-secret-key-change-this-in-production'  # For flash messages
 app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///investment.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -185,6 +184,25 @@ app.jinja_env.filters['currency'] = format_currency
 # HELPER FUNCTIONS
 # ============================================================================
 
+def safe_float_conversion(value, default=0.0):
+    """
+    Safely convert a string to float, returning default if conversion fails.
+    
+    Args:
+        value: String value to convert
+        default: Default value if conversion fails
+        
+    Returns:
+        float: Converted value or default
+    """
+    try:
+        if value is None or value.strip() == '':
+            return default
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 def calculate_portfolio_totals(investments):
     """
     Calculate portfolio totals and analytics.
@@ -225,10 +243,62 @@ def parse_fd_type(investment_type, fd_type_option, fd_type_other):
     fd_type = ""
     if investment_type == "Fixed Deposit":
         if fd_type_option == "other":
-            fd_type = fd_type_other.strip()
+            fd_type = fd_type_other.strip() if fd_type_other else ""
         elif fd_type_option:
             fd_type = fd_type_option
     return fd_type
+
+
+def validate_form_data(form_data):
+    """
+    Validate form data before processing.
+    
+    Args:
+        form_data: Flask request.form object
+        
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    # Check required fields
+    required_fields = ['title', 'amount', 'investment_date', 'maturity_date']
+    for field in required_fields:
+        if not form_data.get(field):
+            return False, f"{field.replace('_', ' ').title()} is required."
+    
+    # Validate amount
+    amount_str = form_data.get('amount')
+    if amount_str:
+        try:
+            amount = float(amount_str)
+            if amount <= 0:
+                return False, "Amount must be greater than 0."
+        except ValueError:
+            return False, "Amount must be a valid number."
+    
+    # Validate interest rate
+    interest_rate_str = form_data.get('interest_rate', '0')
+    if interest_rate_str:
+        try:
+            interest_rate = float(interest_rate_str)
+            if interest_rate < 0 or interest_rate > 100:
+                return False, "Interest rate must be between 0 and 100."
+        except ValueError:
+            return False, "Interest rate must be a valid number."
+    
+    # Validate dates
+    investment_date_str = form_data.get('investment_date')
+    maturity_date_str = form_data.get('maturity_date')
+    
+    try:
+        investment_date = datetime.strptime(investment_date_str, '%Y-%m-%d')
+        maturity_date = datetime.strptime(maturity_date_str, '%Y-%m-%d')
+        
+        if maturity_date <= investment_date:
+            return False, "Maturity date must be after investment date."
+    except ValueError:
+        return False, "Invalid date format. Use YYYY-MM-DD format."
+    
+    return True, ""
 
 
 # ============================================================================
@@ -249,11 +319,17 @@ def index():
     
     # Handle POST request (Create new investment)
     if request.method == "POST":
-        # Extract form data
+        # Validate form data
+        is_valid, error_message = validate_form_data(request.form)
+        if not is_valid:
+            flash(f"Error: {error_message}", "danger")
+            return redirect('/')
+        
+        # Extract form data with safe conversion
         title = request.form.get('title')
-        description = request.form.get('description')
-        amount = float(request.form.get('amount'))
-        interest_rate = float(request.form.get('interest_rate', 0))
+        description = request.form.get('description', '')
+        amount = safe_float_conversion(request.form.get('amount'))
+        interest_rate = safe_float_conversion(request.form.get('interest_rate'), 0.0)
         investment_type = request.form.get('investment_type', 'Fixed Deposit')
         investment_date_str = request.form.get('investment_date')
         maturity_date_str = request.form.get('maturity_date')
@@ -262,28 +338,36 @@ def index():
         fd_type = parse_fd_type(
             investment_type,
             request.form.get('fd_type', ''),
-            request.form.get('fd_type_other', '').strip()
+            request.form.get('fd_type_other', '')
         )
         
-        # Convert string dates to datetime objects
-        investment_date = datetime.strptime(investment_date_str, '%Y-%m-%d')
-        maturity_date = datetime.strptime(maturity_date_str, '%Y-%m-%d')
-        
-        # Create new investment object
-        investment = Investment(
-            title=title,
-            description=description,
-            amount=amount,
-            interest_rate=interest_rate,
-            investment_type=investment_type,
-            investment_date=investment_date,
-            maturity_date=maturity_date,
-            fd_type=fd_type
-        )
-        
-        # Save to database
-        db.session.add(investment)
-        db.session.commit()
+        try:
+            # Convert string dates to datetime objects
+            investment_date = datetime.strptime(investment_date_str, '%Y-%m-%d')
+            maturity_date = datetime.strptime(maturity_date_str, '%Y-%m-%d')
+            
+            # Create new investment object
+            investment = Investment(
+                title=title,
+                description=description,
+                amount=amount,
+                interest_rate=interest_rate,
+                investment_type=investment_type,
+                investment_date=investment_date,
+                maturity_date=maturity_date,
+                fd_type=fd_type
+            )
+            
+            # Save to database
+            db.session.add(investment)
+            db.session.commit()
+            
+            flash("Investment added successfully!", "success")
+            
+        except ValueError as e:
+            flash(f"Error processing dates: {str(e)}", "danger")
+        except Exception as e:
+            flash(f"An error occurred: {str(e)}", "danger")
         
         # Redirect to homepage (PRG pattern)
         return redirect('/')
@@ -319,13 +403,18 @@ def delete_investment(id):
     Returns:
         Redirect to homepage
     """
-    # Find investment by ID
-    investment = Investment.query.filter_by(id=id).first()
-    
-    # Delete if exists
-    if investment:
+    try:
+        # Find investment by ID
+        investment = Investment.query.get_or_404(id)
+        
+        # Delete if exists
         db.session.delete(investment)
         db.session.commit()
+        
+        flash("Investment deleted successfully!", "success")
+        
+    except Exception as e:
+        flash(f"Error deleting investment: {str(e)}", "danger")
     
     return redirect('/')
 
@@ -345,36 +434,57 @@ def update_investment(id):
         Rendered template or redirect
     """
     
-    # Get investment to update
-    investment = Investment.query.filter_by(id=id).first()
+    try:
+        # Get investment to update
+        investment = Investment.query.get_or_404(id)
+        
+    except Exception as e:
+        flash(f"Investment not found: {str(e)}", "danger")
+        return redirect('/')
     
     # Handle POST request (Update investment)
     if request.method == "POST":
-        # Update investment attributes
-        investment.title = request.form.get('title')
-        investment.description = request.form.get('description')
-        investment.amount = float(request.form.get('amount'))
-        investment.interest_rate = float(request.form.get('interest_rate', 0))
-        investment.investment_type = request.form.get('investment_type', 'Fixed Deposit')
-        investment_date_str = request.form.get('investment_date')
-        maturity_date_str = request.form.get('maturity_date')
+        # Validate form data
+        is_valid, error_message = validate_form_data(request.form)
+        if not is_valid:
+            flash(f"Error: {error_message}", "danger")
+            return redirect(f'/update/{id}')
         
-        # Update FD type
-        if investment.investment_type == "Fixed Deposit":
-            fd_type_option = request.form.get('fd_type', '')
-            if fd_type_option == "other":
-                investment.fd_type = request.form.get('fd_type_other', '').strip()
-            elif fd_type_option:
-                investment.fd_type = fd_type_option
-        else:
-            investment.fd_type = ""
-        
-        # Update dates
-        investment.investment_date = datetime.strptime(investment_date_str, '%Y-%m-%d')
-        investment.maturity_date = datetime.strptime(maturity_date_str, '%Y-%m-%d')
-        
-        # Commit changes
-        db.session.commit()
+        try:
+            # Update investment attributes with safe conversion
+            investment.title = request.form.get('title')
+            investment.description = request.form.get('description', '')
+            investment.amount = safe_float_conversion(request.form.get('amount'))
+            investment.interest_rate = safe_float_conversion(request.form.get('interest_rate'), 0.0)
+            investment.investment_type = request.form.get('investment_type', 'Fixed Deposit')
+            investment_date_str = request.form.get('investment_date')
+            maturity_date_str = request.form.get('maturity_date')
+            
+            # Update FD type
+            if investment.investment_type == "Fixed Deposit":
+                fd_type_option = request.form.get('fd_type', '')
+                if fd_type_option == "other":
+                    investment.fd_type = request.form.get('fd_type_other', '').strip()
+                elif fd_type_option:
+                    investment.fd_type = fd_type_option
+                else:
+                    investment.fd_type = ""
+            else:
+                investment.fd_type = ""
+            
+            # Update dates
+            investment.investment_date = datetime.strptime(investment_date_str, '%Y-%m-%d')
+            investment.maturity_date = datetime.strptime(maturity_date_str, '%Y-%m-%d')
+            
+            # Commit changes
+            db.session.commit()
+            
+            flash("Investment updated successfully!", "success")
+            
+        except ValueError as e:
+            flash(f"Error processing data: {str(e)}", "danger")
+        except Exception as e:
+            flash(f"An error occurred: {str(e)}", "danger")
         
         return redirect('/')
     
@@ -400,6 +510,25 @@ def update_investment(id):
 
 
 # ============================================================================
+# ERROR HANDLERS
+# ============================================================================
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 errors."""
+    flash("Page not found.", "warning")
+    return redirect('/')
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle 500 errors."""
+    db.session.rollback()
+    flash("An internal error occurred. Please try again.", "danger")
+    return redirect('/')
+
+
+# ============================================================================
 # APPLICATION INITIALIZATION
 # ============================================================================
 
@@ -408,9 +537,12 @@ def initialize_database():
     Initialize database tables on application startup.
     """
     with app.app_context():
-        db.create_all()
-        print("✅ Investment Portfolio Tracker Database Initialized!")
-        print("✅ Tables created successfully!")
+        try:
+            db.create_all()
+            print("✅ Investment Portfolio Tracker Database Initialized!")
+            print("✅ Tables created successfully!")
+        except Exception as e:
+            print(f"⚠️  Database initialization error: {e}")
 
 
 # ============================================================================
@@ -429,6 +561,7 @@ if __name__ == "__main__":
     print("🚀 Starting Investment Portfolio Tracker...")
     print("📊 Visit: http://127.0.0.1:5001")
     print("⚡ Debug mode: ON")
+    print("🔒 Secret key set for flash messages")
     print("=" * 50)
     
     app.run(
