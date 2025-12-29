@@ -232,11 +232,14 @@ def profile():
 
 @app.context_processor
 def inject_globals():
+    now = datetime.utcnow()
     return {
         'datetime': datetime,
-        'timedelta': timedelta
+        'timedelta': timedelta,
+        'current_year': now.strftime('%Y'),
+        'today_str': now.strftime('%Y-%m-%d'),
+        'next_year_str': (now + timedelta(days=365)).strftime('%Y-%m-%d')
     }
-
 # ============================================================================
 # MAIN
 # ============================================================================
