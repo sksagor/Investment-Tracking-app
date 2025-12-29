@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <title>Investment Portfolio Tracker</title>
+    
+    <!-- Custom CSS Styles -->
+    <style>
+        /* Card hover effect for summary cards */
+        .summary-card {
+            transition: transform 0.3s ease;
+        }
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Profit/Loss color coding */
+        .profit-positive {
+            color: #28a745; /* Green for positive profit */
+        }
+        .profit-negative {
+            color: #dc3545; /* Red for negative profit */
+        }
+        
+        /* Consistent font for currency symbols */
+        .currency-symbol {
+            font-family: Arial, sans-serif;
+            font-weight: 600;
+        }
+        
+        /* Table row hover effect */
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 123, 255, 0.05);
+        }
+        
+        /* Badge styling for investment types */
+        .investment-badge {
+            font-size: 0.85em;
+            padding: 0.35em 0.65em;
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Container -->
+    <div class="container py-4">
+        
+        <!-- Page Header -->
+        <header class="text-center mb-5">
+            <h1 class="display-4 fw-bold text-primary">
+                <i class="bi bi-graph-up me-2"></i>Investment Portfolio Tracker
+            </h1>
+            <p class="lead text-muted">Track and manage all your investments in one place</p>
+        </header>
+        
+        <!-- ==================== -->
+        <!-- SUMMARY DASHBOARD SECTION -->
+        <!-- ==================== -->
+        <section class="mb-5">
+            <h2 class="h4 mb-3 text-secondary">Portfolio Summary</h2>
+            <div class="row g-4">
+                
+                <!-- Total Invested Card -->
+                <div class="col-md-4">
+                    <div class="card summary-card border-primary">
+                        <div class="card-body text-center py-4">
+                            <div class="mb-3">
+                                <i class="bi bi-wallet2 text-primary" style="font-size: 2.5rem;"></i>
+                            </div>
+                            <h5 class="card-title text-muted mb-2">Total Invested</h5>
+                            <h2 class="card-text fw-bold text-primary">
+                                {{ total_invested|currency }}
+                            </h2>
+                            <p class="text-muted small mt-2 mb-0">
+                                Across {{ investments|length }} investment{{ 's' if investments|length != 1 else '' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Maturity Value Card -->
+                <div class="col-md-4">
+                    <div class="card summary-card border-success">
+                        <div class="card-body text-center py-4">
+                            <div class="mb-3">
+                                <i class="bi bi-cash-stack text-success" style="font-size: 2.5rem;"></i>
+                            </div>
+                            <h5 class="card-title text-muted mb-2">Maturity Value</h5>
+                            <h2 class="card-text fw-bold text-success">
+                                {{ total_maturity_value|currency }}
+                            </h2>
+                            <p class="text-muted small mt-2 mb-0">
+                                Including interest earnings
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Expected Profit Card -->
+                <div class="col-md-4">
+                    <div class="card summary-card border-warning">
+                        <div class="card-body text-center py-4">
+                            <div class="mb-3">
+                                <i class="bi bi-arrow-up-right text-warning" style="font-size: 2.5rem;"></i>
+                            </div>
+                            <h5 class="card-title text-muted mb-2">Expected Profit</h5>
+                            <h2 class="card-text fw-bold {% if total_profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
+                                {{ total_profit|currency }}
+                            </h2>
+                            <p class="text-muted small mt-2 mb-0">
+                                {% if total_invested > 0 %}
+                                    {% set profit_percentage = (total_profit / total_invested * 100) %}
+                                    {{ '+' if total_profit >= 0 else '' }}{{ profit_percentage|round(2) }}% return
+                                {% else %}
+                                    0% return
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- ==================== -->
+        <!-- INVESTMENT FORM SECTION -->
+        <!-- ==================== -->
+        <section class="mb-5">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h3 class="h5 mb-0">
+                        <i class="bi bi-plus-circle me-2"></i>
+                        {% if investment %}
+                            Update Investment
+                        {% else %}
+                            Add New Investment
+                        {% endif %}
+                    </h3>
+                </div>
+                
+                <div class="card-body">
+                    <form method="POST" 
+                          action="{% if investment %}/update/{{ investment.id }}{% else %}/{% endif %}" 
+                          id="investmentForm"
+                          class="needs-validation" 
+                          novalidate>
+                        
+                        <!-- Row 1: Title and Investment Type -->
+                        <div class="row mb-3">
+                            <!-- Investment Title -->
+                            <div class="col-md-6 mb-3">
+                                <label for="title" class="form-label fw-semibold">
+                                    <i class="bi bi-card-heading me-1"></i>Investment Title
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="title" 
+                                       name="title" 
+                                       value="{{ investment.title if investment else '' }}" 
+                                       placeholder="e.g., ICICI Bank FD, Tesla Stocks, etc." 
+                                       required>
+                                <div class="invalid-feedback">
+                                    Please enter an investment title.
+                                </div>
+                            </div>
+                            
+                            <!-- Investment Type Dropdown -->
+                            <div class="col-md-6 mb-3">
+                                <label for="investmentType" class="form-label fw-semibold">
+                                    <i class="bi bi-tags me-1"></i>Investment Type
+                                </label>
+                                <select class="form-select" 
+                                        id="investmentType" 
+                                        name="investment_type" 
+                                        required 
+                                        onchange="toggleFdType()">
+                                    <option value="" disabled selected>Select investment type</option>
+                                    <option value="Fixed Deposit" 
+                                            {% if investment and investment.investment_type == 'Fixed Deposit' %}selected{% endif %}>
+                                        Fixed Deposit
+                                    </option>
+                                    <option value="Stocks" 
+                                            {% if investment and investment.investment_type == 'Stocks' %}selected{% endif %}>
+                                        Stocks
+                                    </option>
+                                    <option value="Mutual Funds" 
+                                            {% if investment and investment.investment_type == 'Mutual Funds' %}selected{% endif %}>
+                                        Mutual Funds
+                                    </option>
+                                    <option value="Bonds" 
+                                            {% if investment and investment.investment_type == 'Bonds' %}selected{% endif %}>
+                                        Bonds
+                                    </option>
+                                    <option value="Real Estate" 
+                                            {% if investment and investment.investment_type == 'Real Estate' %}selected{% endif %}>
+                                        Real Estate
+                                    </option>
+                                    <option value="Gold" 
+                                            {% if investment and investment.investment_type == 'Gold' %}selected{% endif %}>
+                                        Gold
+                                    </option>
+                                    <option value="Other" 
+                                            {% if investment and investment.investment_type == 'Other' %}selected{% endif %}>
+                                        Other
+                                    </option>
+                                </select>
+                                <div class="invalid-feedback">
+                                    Please select an investment type.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Row 2: Fixed Deposit Type Selection (Conditional) -->
+                        <div class="row mb-3" id="fdTypeSection" style="display: none;">
+                            <!-- FD Type Selection -->
+                            <div class="col-md-6 mb-3">
+                                <label for="fdType" class="form-label fw-semibold">
+                                    <i class="bi bi-bank me-1"></i>FD Type
+                                </label>
+                                <select class="form-select" 
+                                        id="fdType" 
+                                        name="fd_type" 
+                                        onchange="toggleOtherFdType()">
+                                    <option value="" selected>Select FD type (optional)</option>
+                                    <option value="FSP" 
+                                            {% if investment and investment.fd_type == 'FSP' %}selected{% endif %}>
+                                        FSP (Fixed Saving Plan)
+                                    </option>
+                                    <option value="BSP" 
+                                            {% if investment and investment.fd_type == 'BSP' %}selected{% endif %}>
+                                        BSP (Business Saving Plan)
+                                    </option>
+                                    <option value="other" 
+                                            {% if investment and investment.fd_type and investment.fd_type not in ['FSP', 'BSP'] %}selected{% endif %}>
+                                        Another Type
+                                    </option>
+                                </select>
+                            </div>
+                            
+                            <!-- Custom FD Type Input (Conditional) -->
+                            <div class="col-md-6 mb-3" id="otherFdTypeContainer" style="display: none;">
+                                <label for="fdTypeOther" class="form-label fw-semibold">
+                                    <i class="bi bi-pencil me-1"></i>Specify FD Type
+                                </label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="fdTypeOther" 
+                                       name="fd_type_other"
+                                       value="{% if investment and investment.fd_type and investment.fd_type not in ['FSP', 'BSP'] %}{{ investment.fd_type }}{% endif %}"
+                                       placeholder="e.g., Monthly Income Plan, Senior Citizen FD, etc.">
+                            </div>
+                        </div>
+                        
+                        <!-- Row 3: Amount and Interest Rate -->
+                        <div class="row mb-3">
+                            <!-- Investment Amount -->
+                            <div class="col-md-6 mb-3">
+                                <label for="amount" class="form-label fw-semibold">
+                                    <i class="bi bi-currency-exchange me-1"></i>Amount (৳)
+                                </label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="amount" 
+                                       name="amount" 
+                                       value="{{ investment.amount if investment else '' }}" 
+                                       step="0.01" 
+                                       min="0" 
+                                       required
+                                       placeholder="Enter amount">
+                                <div class="form-text text-muted">
+                                    Enter amount in Bangladeshi Taka (৳)
+                                </div>
+                                <div class="invalid-feedback">
+                                    Please enter a valid investment amount.
+                                </div>
+                            </div>
+                            
+                            <!-- Interest Rate -->
+                            <div class="col-md-6 mb-3">
+                                <label for="interest_rate" class="form-label fw-semibold">
+                                    <i class="bi bi-percent me-1"></i>Annual Interest Rate (%)
+                                </label>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="interest_rate" 
+                                       name="interest_rate" 
+                                       value="{{ investment.interest_rate if investment else '0' }}" 
+                                       step="0.01" 
+                                       min="0" 
+                                       max="100"
+                                       placeholder="e.g., 7.5">
+                                <div class="form-text text-muted">
+                                    Enter annual interest rate (0% for non-interest investments)
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Row 4: Investment and Maturity Dates -->
+                        <div class="row mb-3">
+                            <!-- Investment Date -->
+                            <div class="col-md-6 mb-3">
+                                <label for="investment_date" class="form-label fw-semibold">
+                                    <i class="bi bi-calendar-event me-1"></i>Investment Date
+                                </label>
+                                <input type="date" 
+                                       class="form-control" 
+                                       id="investment_date" 
+                                       name="investment_date" 
+                                       value="{{ investment.investment_date.strftime('%Y-%m-%d') if investment else datetime.utcnow().strftime('%Y-%m-%d') }}" 
+                                       required>
+                                <div class="invalid-feedback">
+                                    Please select an investment date.
+                                </div>
+                            </div>
+                            
+                            <!-- Maturity Date -->
+                            <div class="col-md-6 mb-3">
+                                <label for="maturity_date" class="form-label fw-semibold">
+                                    <i class="bi bi-calendar-check me-1"></i>Maturity Date
+                                </label>
+                                <input type="date" 
+                                       class="form-control" 
+                                       id="maturity_date" 
+                                       name="maturity_date" 
+                                       value="{{ investment.maturity_date.strftime('%Y-%m-%d') if investment else (datetime.utcnow() + timedelta(days=365)).strftime('%Y-%m-%d') }}" 
+                                       required>
+                                <div class="invalid-feedback">
+                                    Please select a maturity date.
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Row 5: Description -->
+                        <div class="mb-4">
+                            <label for="description" class="form-label fw-semibold">
+                                <i class="bi bi-card-text me-1"></i>Description
+                            </label>
+                            <textarea class="form-control" 
+                                      id="description" 
+                                      name="description" 
+                                      rows="3"
+                                      placeholder="Additional details about this investment (optional)">{% if investment %}{{ investment.description }}{% endif %}</textarea>
+                        </div>
+                        
+                        <!-- Form Buttons -->
+                        <div class="d-flex justify-content-end gap-2">
+                            {% if investment %}
+                                <!-- Cancel Button (Update Mode) -->
+                                <a href="/" class="btn btn-outline-secondary">
+                                    <i class="bi bi-x-circle me-1"></i>Cancel
+                                </a>
+                                <!-- Update Button -->
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="bi bi-check-circle me-1"></i>Update Investment
+                                </button>
+                            {% else %}
+                                <!-- Add Button -->
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle me-1"></i>Add Investment
+                                </button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+        
+        <!-- ==================== -->
+        <!-- INVESTMENTS TABLE SECTION -->
+        <!-- ==================== -->
+        <section>
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h3 class="h5 mb-0">
+                        <i class="bi bi-list-check me-2"></i>Investment Portfolio
+                        <span class="badge bg-light text-dark ms-2">{{ investments|length }}</span>
+                    </h3>
+                </div>
+                
+                <div class="card-body">
+                    {% if investments %}
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col" class="text-center">#</th>
+                                        <th scope="col">Title</th>
+                                        <th scope="col">Type</th>
+                                        <th scope="col" class="text-end">Amount (৳)</th>
+                                        <th scope="col">Invested On</th>
+                                        <th scope="col">Matures On</th>
+                                        <th scope="col" class="text-end">Maturity Value (৳)</th>
+                                        <th scope="col" class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                
+                                <tbody>
+                                    {% for inv in investments %}
+                                    <tr>
+                                        <!-- Serial Number -->
+                                        <th scope="row" class="text-center">{{ loop.index }}</th>
+                                        
+                                        <!-- Investment Title -->
+                                        <td class="fw-semibold">{{ inv.title }}</td>
+                                        
+                                        <!-- Investment Type Badge -->
+                                        <td>
+                                            <span class="badge investment-badge 
+                                                {% if inv.investment_type == 'Fixed Deposit' %}bg-info
+                                                {% elif inv.investment_type == 'Stocks' %}bg-primary
+                                                {% elif inv.investment_type == 'Mutual Funds' %}bg-success
+                                                {% elif inv.investment_type == 'Bonds' %}bg-secondary
+                                                {% elif inv.investment_type == 'Real Estate' %}bg-dark
+                                                {% elif inv.investment_type == 'Gold' %}bg-warning text-dark
+                                                {% else %}bg-secondary{% endif %}">
+                                                {{ inv.get_display_type() }}
+                                            </span>
+                                        </td>
+                                        
+                                        <!-- Investment Amount -->
+                                        <td class="text-end fw-bold currency-symbol">
+                                            {{ inv.format_amount() }}
+                                        </td>
+                                        
+                                        <!-- Investment Date -->
+                                        <td>
+                                            <span class="text-muted">
+                                                {{ inv.investment_date.strftime('%d %b %Y') }}
+                                            </span>
+                                        </td>
+                                        
+                                        <!-- Maturity Date -->
+                                        <td>
+                                            <span class="text-muted">
+                                                {{ inv.maturity_date.strftime('%d %b %Y') }}
+                                            </span>
+                                        </td>
+                                        
+                                        <!-- Maturity Value -->
+                                        <td class="text-end">
+                                            <span class="badge bg-success currency-symbol">
+                                                {{ inv.format_maturity_amount() }}
+                                            </span>
+                                        </td>
+                                        
+                                        <!-- Action Buttons -->
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <!-- Edit Button -->
+                                                <a href="/update/{{ inv.id }}" 
+                                                   class="btn btn-outline-warning"
+                                                   title="Edit investment">
+                                                    <i class="bi bi-pencil-square"></i>
+                                                </a>
+                                                
+                                                <!-- Delete Button -->
+                                                <a href="/delete/{{ inv.id }}" 
+                                                   class="btn btn-outline-danger"
+                                                   title="Delete investment"
+                                                   onclick="return confirm('Are you sure you want to delete this investment? This action cannot be undone.')">
+                                                    <i class="bi bi-trash"></i>
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                
+                                <!-- Table Footer with Totals -->
+                                <tfoot class="table-dark">
+                                    <tr>
+                                        <th colspan="3" class="text-end">PORTFOLIO TOTALS:</th>
+                                        <th class="text-end fw-bold currency-symbol">
+                                            {{ total_invested|currency }}
+                                        </th>
+                                        <th colspan="2"></th>
+                                        <th class="text-end fw-bold currency-symbol">
+                                            {{ total_maturity_value|currency }}
+                                        </th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    {% else %}
+                        <!-- Empty State Message -->
+                        <div class="text-center py-5">
+                            <i class="bi bi-wallet2 text-muted" style="font-size: 4rem;"></i>
+                            <h4 class="h5 mt-3 text-muted">No investments found</h4>
+                            <p class="text-muted mb-0">
+                                Start by adding your first investment using the form above.
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+        
+        <!-- Footer -->
+        <footer class="mt-5 pt-4 border-top text-center text-muted">
+            <p class="small mb-1">
+                <i class="bi bi-c-circle"></i> {{ datetime.utcnow().strftime('%Y') }} Investment Portfolio Tracker
+            </p>
+            <p class="small mb-0">
+                Built with <i class="bi bi-heart-fill text-danger"></i> using Flask & Bootstrap
+            </p>
+        </footer>
+    </div>
+    
+    <!-- ==================== -->
+    <!-- JAVASCRIPT SECTION -->
+    <!-- ==================== -->
+    
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script>
+        /**
+         * TOGGLE FD TYPE SECTION
+         * Shows/hides the Fixed Deposit type selection section
+         * based on the selected investment type
+         */
+        function toggleFdType() {
+            const investmentType = document.getElementById('investmentType').value;
+            const fdTypeSection = document.getElementById('fdTypeSection');
+            
+            // Show FD type section only for Fixed Deposit investments
+            if (investmentType === 'Fixed Deposit') {
+                fdTypeSection.style.display = 'block';
+                
+                // Initialize FD type for existing investment (in edit mode)
+                {% if investment and investment.investment_type == 'Fixed Deposit' %}
+                    const fdTypeSelect = document.getElementById('fdType');
+                    {% if investment.fd_type %}
+                        {% if investment.fd_type in ['FSP', 'BSP'] %}
+                            fdTypeSelect.value = '{{ investment.fd_type }}';
+                        {% else %}
+                            fdTypeSelect.value = 'other';
+                            toggleOtherFdType();
+                            document.getElementById('fdTypeOther').value = '{{ investment.fd_type }}';
+                        {% endif %}
+                    {% endif %}
+                {% endif %}
+            } else {
+                fdTypeSection.style.display = 'none';
+            }
+        }
+        
+        /**
+         * TOGGLE OTHER FD TYPE INPUT
+         * Shows/hides the custom FD type input field
+         * when "Another Type" is selected
+         */
+        function toggleOtherFdType() {
+            const fdType = document.getElementById('fdType').value;
+            const otherContainer = document.getElementById('otherFdTypeContainer');
+            
+            if (fdType === 'other') {
+                otherContainer.style.display = 'block';
+                document.getElementById('fdTypeOther').required = true;
+            } else {
+                otherContainer.style.display = 'none';
+                document.getElementById('fdTypeOther').required = false;
+                document.getElementById('fdTypeOther').value = '';
+            }
+        }
+        
+        /**
+         * DATE VALIDATION
+         * Ensures maturity date is not earlier than investment date
+         */
+        function setupDateValidation() {
+            const investmentDate = document.getElementById('investment_date');
+            const maturityDate = document.getElementById('maturity_date');
+            
+            // Set minimum maturity date based on investment date
+            investmentDate.addEventListener('change', function() {
+                if (this.value) {
+                    maturityDate.min = this.value;
+                    
+                    // If maturity date is earlier than new investment date, reset it
+                    if (maturityDate.value && maturityDate.value < this.value) {
+                        maturityDate.value = this.value;
+                    }
+                }
+            });
+            
+            // Initialize minimum date on page load
+            if (investmentDate.value) {
+                maturityDate.min = investmentDate.value;
+            }
+        }
+        
+        /**
+         * FORM VALIDATION
+         * Bootstrap form validation
+         */
+        function setupFormValidation() {
+            const form = document.getElementById('investmentForm');
+            
+            form.addEventListener('submit', function(event) {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                
+                form.classList.add('was-validated');
+            }, false);
+        }
+        
+        /**
+         * INITIALIZE APPLICATION
+         * Setup all functionality when DOM is loaded
+         */
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize toggle functions
+            toggleFdType();
+            
+            // Setup date validation
+            setupDateValidation();
+            
+            // Setup form validation
+            setupFormValidation();
+            
+            // Auto-focus on first input field
+            const firstInput = document.querySelector('form input:not([type="hidden"])');
+            if (firstInput && !firstInput.value) {
+                firstInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
